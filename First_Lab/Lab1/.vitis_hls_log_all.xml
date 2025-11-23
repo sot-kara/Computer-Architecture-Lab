@@ -3,6 +3,8 @@
   <errorLogs>
     <logs>
       <csimLog>
+        <logs message="ERROR: [SIM 211-100] 'csim_design' failed: compilation error(s)." projectName="Lab1" solutionName="solution1" date="2025-11-23T20:13:30.047+0200"/>
+        <logs message="ERROR: [SIM 211-100] CSim failed with errors." projectName="Lab1" solutionName="solution1" date="2025-11-23T20:10:43.252+0200"/>
         <logs message="ERROR: [SIM 211-100] CSim failed with errors." projectName="Lab1" solutionName="solution1" date="2025-11-23T20:04:57.232+0200"/>
         <logs message="ERROR: [SIM 211-100] 'csim_design' failed: compilation error(s)." projectName="Lab1" solutionName="solution1" date="2025-11-23T19:59:04.526+0200"/>
         <logs message="ERROR: [SIM 211-100] 'csim_design' failed: compilation error(s)." projectName="Lab1" solutionName="solution1" date="2025-11-23T19:57:29.298+0200"/>

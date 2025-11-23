@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <math.h>
 
-void IMAGE_DIFF_POSTERIZE(uint8_t A [HEIGHT][WIDTH], uint8_t B[HEIGHT][WIDTH], uint8_t **C){
+void IMAGE_DIFF_POSTERIZE(uint8_t A [HEIGHT][WIDTH], uint8_t B[HEIGHT][WIDTH], uint8_t C[HEIGHT][WIDTH]){
 
 	int16_t D; // difference of pixel values
 
