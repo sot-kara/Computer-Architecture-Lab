@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<autopilotfilemapping:AutoPilotFileMapping xmlns:autopilotfilemapping="www.autoesl.com/autopilotfilemapping">
+  <source>
+    <originFiles name="IMAGE_DIFF_POSTERIZE.cpp" path="C:\Users\sotka\Documents\Computer-Architecture-Lab\First_Lab\IMAGE_DIFF_POSTERIZE.cpp"/>
+  </source>
+  <testbench>
+    <originFiles name="tb_IMAGE_DIFF_POSTERIZE.cpp" path="C:\Users\sotka\Documents\Computer-Architecture-Lab\First_Lab\tb_IMAGE_DIFF_POSTERIZE.cpp"/>
+  </testbench>
+</autopilotfilemapping:AutoPilotFileMapping>

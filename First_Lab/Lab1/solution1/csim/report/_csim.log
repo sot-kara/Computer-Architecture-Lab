@@ -1,0 +1,6 @@
+INFO: [SIM 2] *************** CSIM start ***************
+INFO: [SIM 4] CSIM will launch GCC as the compiler.
+   Compiling ../../../../IMAGE_DIFF_POSTERIZE.cpp in debug mode
+   Generating csim.exe
+ERR: [SIM 100] CSim failed with errors.
+INFO: [SIM 3] *************** CSIM finish ***************

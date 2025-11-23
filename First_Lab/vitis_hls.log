@@ -1,0 +1,41 @@
+INFO: [HLS 200-10] Running 'C:/Xilinx/Vitis_HLS/2022.2/bin/unwrapped/win64.o/vitis_hls.exe'
+INFO: [HLS 200-10] For user 'sotka' on host 'laptop-s8022gmh' (Windows NT_amd64 version 6.2) on Sun Nov 23 20:04:42 +0200 2025
+INFO: [HLS 200-10] In directory 'C:/Users/sotka/Documents/Computer-Architecture-Lab/First_Lab'
+Sourcing Tcl script 'C:/Users/sotka/Documents/Computer-Architecture-Lab/First_Lab/Lab1/solution1/csim.tcl'
+INFO: [HLS 200-1510] Running: source C:/Users/sotka/Documents/Computer-Architecture-Lab/First_Lab/Lab1/solution1/csim.tcl
+INFO: [HLS 200-1510] Running: open_project Lab1 
+INFO: [HLS 200-10] Opening project 'C:/Users/sotka/Documents/Computer-Architecture-Lab/First_Lab/Lab1'.
+INFO: [HLS 200-1510] Running: add_files IMAGE_DIFF_POSTERIZE.cpp 
+INFO: [HLS 200-10] Adding design file 'IMAGE_DIFF_POSTERIZE.cpp' to the project
+INFO: [HLS 200-1510] Running: add_files -tb tb_IMAGE_DIFF_POSTERIZE.cpp 
+INFO: [HLS 200-10] Adding test bench file 'tb_IMAGE_DIFF_POSTERIZE.cpp' to the project
+INFO: [HLS 200-1510] Running: open_solution solution1 -flow_target vivado 
+INFO: [HLS 200-10] Opening solution 'C:/Users/sotka/Documents/Computer-Architecture-Lab/First_Lab/Lab1/solution1'.
+INFO: [SYN 201-201] Setting up clock 'default' with a period of 10ns.
+INFO: [HLS 200-1611] Setting target device to 'xcu200-fsgd2104-2-e'
+INFO: [HLS 200-1505] Using flow_target 'vivado'
+Resolution: For help on HLS 200-1505 see www.xilinx.com/cgi-bin/docs/rdoc?v=2022.2;t=hls+guidance;d=200-1505.html
+INFO: [HLS 200-1510] Running: set_part xcu200-fsgd2104-2-e 
+INFO: [HLS 200-1510] Running: create_clock -period 10 -name default 
+INFO: [HLS 200-1510] Running: csim_design -quiet 
+Running Dispatch Server on port: 53678
+INFO: [SIM 211-2] *************** CSIM start ***************
+INFO: [SIM 211-4] CSIM will launch GCC as the compiler.
+   Compiling ../../../../IMAGE_DIFF_POSTERIZE.cpp in debug mode
+   Generating csim.exe
+@E Simulation failed: SIGSEGV.
+ERROR: [SIM 211-100] CSim failed with errors.
+INFO: [SIM 211-3] *************** CSIM finish ***************
+INFO: [HLS 200-111] Finished Command csim_design CPU user time: 0 seconds. CPU system time: 1 seconds. Elapsed time: 3.128 seconds; current allocated memory: 0.543 MB.
+4
+    while executing
+"source C:/Users/sotka/Documents/Computer-Architecture-Lab/First_Lab/Lab1/solution1/csim.tcl"
+    invoked from within
+"hls::main C:/Users/sotka/Documents/Computer-Architecture-Lab/First_Lab/Lab1/solution1/csim.tcl"
+    ("uplevel" body line 1)
+    invoked from within
+"uplevel 1 hls::main {*}$newargs"
+    (procedure "hls_proc" line 16)
+    invoked from within
+"hls_proc [info nameofexecutable] $argv"
+INFO: [HLS 200-112] Total CPU user time: 2 seconds. Total CPU system time: 2 seconds. Total elapsed time: 15.934 seconds; peak allocated memory: 94.109 MB.
