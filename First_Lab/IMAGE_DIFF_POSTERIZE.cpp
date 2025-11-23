@@ -1,5 +1,5 @@
-#define WIDTH 2
-#define HEIGHT 2
+#define WIDTH 128
+#define HEIGHT 128
 #define T1 32
 #define T2 96
 #include <stdio.h>
