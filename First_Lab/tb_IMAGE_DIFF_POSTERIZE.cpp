@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#define WIDTH 128
-#define HEIGHT 128
+#define WIDTH 512
+#define HEIGHT 512
 
 
 void IMAGE_DIFF_POSTERIZE(uint8_t A [HEIGHT][WIDTH], uint8_t B[HEIGHT][WIDTH], uint8_t C[HEIGHT][WIDTH]);
