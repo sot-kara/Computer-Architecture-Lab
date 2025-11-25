@@ -2,20 +2,27 @@
 #define HEIGHT 128
 #define T1 32
 #define T2 96
-#include <stdio.h>
 #include <stdint.h>
 #include <math.h>
 
 void IMAGE_DIFF_POSTERIZE(uint8_t A [HEIGHT][WIDTH], uint8_t B[HEIGHT][WIDTH], uint8_t C[HEIGHT][WIDTH]){
 
-	int16_t D; // difference of pixel values
+	uint8_t D; // difference of pixel values
+	int16_t temp_d;
+
+// Partition the arrays so more there can be more access in one iteration with loop unrolling and pipelining
+#pragma HLS ARRAY_PARTITION variable=A type=block dim=2 factor=4
+#pragma HLS ARRAY_PARTITION variable=B type=block dim=2 factor=4
+#pragma HLS ARRAY_PARTITION variable=C type=block dim=2 factor=4
 
 	// iterate through A and B
 	for(int i = 0 ; i < HEIGHT ; i++){
 
+		#pragma HLS PIPELINE II=32 // pipeline the A and B load operations mainly
 		for(int j =0 ; j < WIDTH ; j++){
-
-			D = abs(A[i][j] - B[i][j]); // get the difference of each corresponding pixels
+		#pragma HLS unroll  factor=4 // Loop unroll by 4
+			temp_d = A[i][j] - B[i][j];
+			D = abs(temp_d); // get the difference of each corresponding pixels
 			if(D < T1){
 				C[i][j] = 0;
 			}
