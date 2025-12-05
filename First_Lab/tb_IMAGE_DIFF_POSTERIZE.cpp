@@ -3,6 +3,7 @@
 
 #define WIDTH 512
 #define HEIGHT 512
+#define OUTPUT_PATH "C:/Users/{USER}/Documents/ref_output.dat" // change this to your prefered path
 
 
 void IMAGE_DIFF_POSTERIZE(uint8_t A [HEIGHT][WIDTH], uint8_t B[HEIGHT][WIDTH], uint8_t C[HEIGHT][WIDTH]);
@@ -32,12 +33,12 @@ int main(){
 //		}
 //		putchar('\n');
 //	}
-
-    FILE *ref= fopen("C:/Users/sotka/Documents/ref_output.dat", "r");
+	
+    FILE *ref= fopen(OUTPUT_PATH, "r"); 
 
     if(ref==NULL){
 
-    FILE *out = fopen("C:/Users/sotka/Documents/ref_output.dat", "w");
+    FILE *out = fopen(OUTPUT_PATH, "w");
     if (!out) {
         printf("File open error");
         return 1;
