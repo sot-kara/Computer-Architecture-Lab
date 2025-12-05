@@ -2,8 +2,8 @@
 #include <hls_stream.h>
 #include <ap_int.h>
 
-#define WIDTH 128
-#define HEIGHT 128
+#define WIDTH 256
+#define HEIGHT 256
 #define T1 32
 #define T2 96
 
@@ -21,6 +21,7 @@ void IMAGE_DIFF_POSTERIZE(hls::stream<wide_t> &stream_A,
     #pragma HLS INTERFACE axis port=stream_A
     #pragma HLS INTERFACE axis port=stream_B
     #pragma HLS INTERFACE axis port=stream_C
+
     #pragma HLS INTERFACE s_axilite port=return
 
     // ---------------------------------------------------------
@@ -34,9 +35,9 @@ void IMAGE_DIFF_POSTERIZE(hls::stream<wide_t> &stream_A,
     static uint8_t buf_C[HEIGHT][WIDTH];
 
     // Partition logic remains the same (explodes to registers)
-    #pragma HLS ARRAY_PARTITION variable=buf_A type=complete dim=0
-    #pragma HLS ARRAY_PARTITION variable=buf_B type=complete dim=0
-    #pragma HLS ARRAY_PARTITION variable=buf_C type=complete dim=0
+    #pragma HLS ARRAY_PARTITION variable=buf_A type=complete dim=0 
+    #pragma HLS ARRAY_PARTITION variable=buf_B type=complete dim=0 
+    #pragma HLS ARRAY_PARTITION variable=buf_C type=complete dim=0 
 
 
     GENERAL_ROW_LOOP: for(int i = 0; i < HEIGHT; i++) {

@@ -5,8 +5,8 @@
 #include <ap_int.h>
 
 // CRITICAL: Must match Kernel Dimensions
-#define WIDTH 128
-#define HEIGHT 128
+#define WIDTH 64
+#define HEIGHT 64
 
 typedef ap_uint<512> wide_t;
 
