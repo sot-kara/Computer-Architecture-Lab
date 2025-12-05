@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#define WIDTH 512
-#define HEIGHT 512
+#define WIDTH 256
+#define HEIGHT 256
 #define OUTPUT_PATH "C:/Users/{USER}/Documents/ref_output.dat" // change this to your prefered path
 
 
@@ -56,17 +56,19 @@ int main(){
     printf("Reference output from C simulation written.\n");
     return 0;
     }
-
+// This part will run for the RTL part of the cosimulation
     for (int i = 0; i < HEIGHT; i++) {
     	for(int j = 0; j< WIDTH; j++ ){
         if (fscanf(ref, "%3d", &ref_data[i][j]) != 1) {
             printf("Error: reference file corrupted at index (%d,%d).\n", i,j);
             fclose(ref);
+            remove(OUTPUT_PATH);
             return 1;
         }
     	}
     }
     fclose(ref);
+    remove(OUTPUT_PATH);
 
     bool match = 1;
     for (int i = 0; i < HEIGHT; i++) {
