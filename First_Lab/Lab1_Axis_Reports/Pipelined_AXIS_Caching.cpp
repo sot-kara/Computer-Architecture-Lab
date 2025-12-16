@@ -22,7 +22,6 @@ void IMAGE_DIFF_POSTERIZE(hls::stream<wide_t> &stream_A,
     #pragma HLS INTERFACE axis port=stream_B
     #pragma HLS INTERFACE axis port=stream_C
 
-    #pragma HLS INTERFACE s_axilite port=return
 
     // ---------------------------------------------------------
     // INTERNAL CACHE (FIXED: Use static for the testbench)
@@ -87,8 +86,7 @@ void IMAGE_DIFF_POSTERIZE(hls::stream<wide_t> &stream_A,
                 int end_bit   = start_bit + 7;
                 
                 chunk_c.range(end_bit, start_bit) = buf_C[i][pixel_idx];
-            }
-            
+            }            
             stream_C.write(chunk_c);
         }
     }
