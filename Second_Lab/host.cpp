@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
     EventTimer et;
     std::string binaryFile = argv[1];
     
-    size_t vector_size_bytes = sizeof(int) * DATA_SIZE;
+    size_t vector_size_bytes = sizeof(uint8_t) * DATA_SIZE;
     int size = DATA_SIZE;
 
     // OpenCL objects
@@ -48,10 +48,10 @@ int main(int argc, char **argv) {
     // 2. Host Memory Allocation & Initialization
     // -------------------------------------------------------------------------
     et.add("Allocate Memory in Host Memory");
-    std::vector<int, aligned_allocator<int>> source_in1(DATA_SIZE);
-    std::vector<int, aligned_allocator<int>> source_in2(DATA_SIZE);
-    std::vector<int, aligned_allocator<int>> source_hw_results(DATA_SIZE);
-    std::vector<int, aligned_allocator<int>> source_sw_results(DATA_SIZE);
+    std::vector<uint8_t, aligned_allocator<int>> source_in1(DATA_SIZE);
+    std::vector<uint8_t, aligned_allocator<int>> source_in2(DATA_SIZE);
+    std::vector<uint8_t, aligned_allocator<int>> source_hw_results(DATA_SIZE);
+    std::vector<uint8_t, aligned_allocator<int>> source_sw_results(DATA_SIZE);
     et.finish();
 
     // Fill vectors with random data
