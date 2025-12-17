@@ -1,7 +1,7 @@
 #include <stdint.h>
-
-#define WIDTH 256
-#define HEIGHT 256
+#include <stdio.h>
+#define WIDTH 3
+#define HEIGHT 3
 #define BUFFER_HEIGHT 3
 #define BUFFER_WIDTH 3
 #define T1 32
@@ -21,7 +21,6 @@ const unsigned int c_len = HEIGHT*WIDTH / c_size;
 uint8_t Compare(uint8_t A, uint8_t B);
 
 
-extern "C" {
     /* Default I/O implies 32 bit AXI4-DATA_WIDTH. Therefore we're starting with one integer read per cycle. */
 
     void IMAGE_DIFF_POSTERIZE(const uint8_t *in_A, const uint8_t  *in_B, uint8_t *out, unsigned int size){
@@ -121,7 +120,7 @@ extern "C" {
 }
 
 } 
-}
+    
 uint8_t Compare(uint8_t A, uint8_t B){
     uint8_t C;
     int16_t temp_d = (int16_t) A - (int16_t) B;
@@ -135,4 +134,27 @@ uint8_t Compare(uint8_t A, uint8_t B){
     else C = 255;
 
     return C;
+}
+
+
+
+
+int main(){
+
+    const int size = 9;
+    uint8_t A[size], B[size];
+    uint8_t out[size];
+    
+    
+    for(int i=0; i<size; i++){
+        A[i] = 100;
+        B[i] = 1;
+        out[i] = 0;
+    }
+    
+    IMAGE_DIFF_POSTERIZE(A,B,out,size);
+    
+    for(int i =0 ; i<size; i++){
+        printf("%d ", out[i]);
+    }
 }
