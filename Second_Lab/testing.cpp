@@ -24,15 +24,6 @@ uint8_t Compare(uint8_t A, uint8_t B);
     /* Default I/O implies 32 bit AXI4-DATA_WIDTH. Therefore we're starting with one integer read per cycle. */
 
     void IMAGE_DIFF_POSTERIZE(const uint8_t *in_A, const uint8_t  *in_B, uint8_t *out, unsigned int size){
-
-        #pragma HLS INTERFACE m_axi port = in_A offset = slave bundle = gmem
-        #pragma HLS INTERFACE m_axi port = in_B offset = slave bundle = gmem
-        #pragma HLS INTERFACE m_axi port = out offset = slave bundle = gmem
-        #pragma HLS INTERFACE s_axilite port = in_A bundle = control
-        #pragma HLS INTERFACE s_axilite port = in_B bundle = control
-        #pragma HLS INTERFACE s_axilite port = out bundle = control
-        #pragma HLS INTERFACE s_axilite port = size bundle = control
-        #pragma HLS INTERFACE s_axilite port = return bundle = control
                 
 
         unsigned int v1_buffer[BUFFER_HEIGHT][BUFFER_WIDTH];   // Local memory to store vector1
@@ -42,85 +33,59 @@ uint8_t Compare(uint8_t A, uint8_t B);
 
         // Per iteration of this loop perform BUFFER_SIZE vector addition
         Chunk_loop: for (int i = 0; i < size; i += 1) {
-        #pragma HLS LOOP_TRIPCOUNT min = c_len max = c_len
 
-        // boundary checks
-            if(i/WIDTH + BUFFER_HEIGHT > HEIGHT )
-                break;
-            if ((i % WIDTH) + BUFFER_WIDTH > WIDTH) {
-                i += WIDTH - (i % WIDTH)-1;
-                continue;
-            }
-            
-            
+read: for (int j = 0; j < BUFFER_HEIGHT; j++) {
+    for (int k = 0; k < BUFFER_WIDTH; k++) {
 
+        // Calculate the global row and column indices for the current window pixel
+        int row = i / WIDTH + j - 1;  // Offset by -1 for the 3x3 relative to center
+        int col = i % WIDTH + k - 1;
 
-            read:    for (int j = 0; j < BUFFER_HEIGHT; j++) {
-                for(int k = 0; k < BUFFER_WIDTH; k++){
-            #pragma HLS LOOP_TRIPCOUNT min = c_size max = c_size
-            #pragma HLS PIPELINE II = 1
+        // Boundary check: Use zero-padding when out of bounds
+        bool valid = row >= 0 && row < HEIGHT && col >= 0 && col < WIDTH;
 
-                v1_buffer[j][k] = in_A[i + j*BUFFER_WIDTH + k];
-                v2_buffer[j][k] = in_B[i + j*BUFFER_WIDTH + k];
-                }
-            }
+        // Safely populate the buffer
+        v1_buffer[j][k] = valid ? in_A[row * WIDTH + col] : 0;
+        v2_buffer[j][k] = valid ? in_B[row * WIDTH + col] : 0;
+    }
+}
+printf("Buffers after reading input:\n");
+for(int j=0; j < BUFFER_HEIGHT; j++) {
+    for(int k=0; k < BUFFER_WIDTH; k++){
+        vout_buffer[j][k] = Compare((uint8_t)v1_buffer[j][k], (uint8_t)v2_buffer[j][k]);
+        printf("%d ", vout_buffer[j][k]);
+    }
+    printf("\n");
+}
 
-            // PIPELINE pragma reduces the initiation interval for loop by allowing the
-            // concurrent executions of operations
-            process:     for (int j = 0; j < BUFFER_HEIGHT; j++) {
-                for(int k = 0; k < BUFFER_WIDTH; k++){
-            #pragma HLS LOOP_TRIPCOUNT min = c_size max = c_size
-            #pragma HLS PIPELINE II = 1
-                vout_buffer[j][k] = v1_buffer[j][k] + v2_buffer[j][k];
-                vout_buffer[j][k] = Compare((uint8_t) v1_buffer[j][k], (uint8_t) v2_buffer[j][k]);
-            }
-        }
+// Perform filter processing
 
-/*
-            // print buffer for debugging
-            printf("Buffer is: \n");
-            write:    for (int j = 0; j < BUFFER_HEIGHT; j++) {
-                for(int k = 0; k < BUFFER_WIDTH; k++){
-                    printf("%d ",vout_buffer[j][k]);
-        }
-                    printf("\n");
-            } */
+// Handle boundary pixels
+if (i / WIDTH == 0 || i / WIDTH == HEIGHT - BUFFER_HEIGHT || 
+    i % WIDTH == 0 || i % WIDTH == WIDTH - BUFFER_WIDTH) {
         
-    // Now we check for boundary pixels and copy them directly
-    if(i/WIDTH ==0){
-        for(int col=0; col<BUFFER_WIDTH; col++){
-            // If first row, write first row of buffer
-                out[i + col] = vout_buffer[0][col];
-        }
-    }
-    
-    if(i/WIDTH == HEIGHT - BUFFER_HEIGHT){
-        for(int col=0; col<BUFFER_WIDTH; col++){
-            // If last row, write last row of buffer
-            out[i + (2*WIDTH) + col] = vout_buffer[2][col];
-        }
-    }
-    if(i%WIDTH == 0){
-        for(int row=0; row<BUFFER_HEIGHT; row++){
-            // If first column, write first column of buffer
-            out[i + row*WIDTH] = vout_buffer[row][0];
-        }
-    }
+        out[i] = vout_buffer[1][1]; // Center pixel
+}
+else{
+process:
 
-    if(i%WIDTH == WIDTH - BUFFER_WIDTH){
-        for(int row=0; row<BUFFER_HEIGHT; row++){
-            // If last column, write last column of buffer
-            out[i + row*WIDTH + 2] = vout_buffer[row][2];
-        }
+        // Compute filtered value for the center
+        temp_filter = 5 * vout_buffer[1][1] 
+                      - vout_buffer[0][1] // Top
+                      - vout_buffer[2][1] // Bottom
+                      - vout_buffer[1][0] // Left
+                      - vout_buffer[1][2]; // Right
 
-    }
-    // For non-boundary pixels, apply filter and write result to global memory clipping to [0,255]
-        temp_filter = 5*vout_buffer[1][1] - vout_buffer[1][2] - vout_buffer[1][0] - vout_buffer[2][1] - vout_buffer[0][1]; 
-        out[i + WIDTH + 1] = (uint8_t)(temp_filter<0 ? 0 : (temp_filter>255 ? 255 : temp_filter) );
+        // Clip result and write to "out" buffer
+        out[i] = 
+            (uint8_t)(temp_filter < 0 ? 0 : (temp_filter > 255 ? 255 : temp_filter));
+
+
+
 }
 
 } 
-    
+}
 uint8_t Compare(uint8_t A, uint8_t B){
     uint8_t C;
     int16_t temp_d = (int16_t) A - (int16_t) B;
