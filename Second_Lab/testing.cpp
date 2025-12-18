@@ -33,7 +33,13 @@ uint8_t Compare(uint8_t A, uint8_t B);
 
         // Per iteration of this loop perform BUFFER_SIZE vector addition
         Chunk_loop: for (int i = 0; i < size; i += 1) {
-
+// Handle boundary pixels
+if (i / WIDTH == 0 || i / WIDTH == HEIGHT - 1 || 
+    i % WIDTH == 0 || i % WIDTH == WIDTH - 1) {
+        
+        out[i] = 0; // Center pixel
+}
+else{
 read: for (int j = 0; j < BUFFER_HEIGHT; j++) {
     for (int k = 0; k < BUFFER_WIDTH; k++) {
 
@@ -59,14 +65,6 @@ for(int j=0; j < BUFFER_HEIGHT; j++) {
 }
 
 // Perform filter processing
-
-// Handle boundary pixels
-if (i / WIDTH == 0 || i / WIDTH == HEIGHT - BUFFER_HEIGHT || 
-    i % WIDTH == 0 || i % WIDTH == WIDTH - BUFFER_WIDTH) {
-        
-        out[i] = vout_buffer[1][1]; // Center pixel
-}
-else{
 process:
 
         // Compute filtered value for the center
@@ -106,7 +104,7 @@ uint8_t Compare(uint8_t A, uint8_t B){
 
 int main(){
 
-    const int size = 9;
+    const int size = WIDTH * HEIGHT;
     uint8_t A[size], B[size];
     uint8_t out[size];
     
