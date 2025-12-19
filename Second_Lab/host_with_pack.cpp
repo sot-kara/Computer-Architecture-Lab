@@ -20,8 +20,10 @@
 #define T2 96
 
 const int DATA_SIZE = WIDTH*HEIGHT;
-const int WORD_COUNT = DATA_SIZE / 4; // Assuming 4 bytes per word 
+const int WORD_COUNT = DATA_SIZE / 4 + (DATA_SIZE % 4 != 0 ? 1 : 0); // Assuming 4 bytes per word 
+
 uint8_t Compare(uint8_t A, uint8_t B);
+void IMAGE_DIFF_POSTERIZE(uint32_t *A , uint32_t *B, uint32_t *out);
 
 int main(int argc, char **argv) {
 
@@ -53,10 +55,10 @@ int main(int argc, char **argv) {
     std::vector<uint8_t> source_in2_bytes(DATA_SIZE);
     
     
-    std::vector<uint32_t, aligned_allocator<int>> source_in1(WORD_COUNT);
-    std::vector<uint32_t, aligned_allocator<int>> source_in2(WORD_COUNT);
-    std::vector<uint32_t, aligned_allocator<int>> source_hw_results(WORD_COUNT);
-    std::vector<uint32_t, aligned_allocator<int>> source_sw_results(WORD_COUNT);
+    std::vector<uint32_t, aligned_allocator<uint32_t>> source_in1(WORD_COUNT);
+    std::vector<uint32_t, aligned_allocator<uint32_t>> source_in2(WORD_COUNT);
+    std::vector<uint32_t, aligned_allocator<uint32_t>> source_hw_results(WORD_COUNT);
+    std::vector<uint32_t, aligned_allocator<uint32_t>> source_sw_results(WORD_COUNT);
     et.finish();
 
     // Fill vectors with random data
@@ -94,13 +96,15 @@ int main(int argc, char **argv) {
     // Calculate Golden Result (Software Reference)
     for (int i = 0; i < WORD_COUNT; i++) {
 
-        int byte0 = Compare((uint8_t) source_in1_bytes[4*i], (uint8_t) source_in2_bytes[4*i]);
+      /*  int byte0 = Compare((uint8_t) source_in1_bytes[4*i], (uint8_t) source_in2_bytes[4*i]);
         int byte1 = Compare((uint8_t) source_in1_bytes[4*i + 1], (uint8_t) source_in2_bytes[4*i + 1]);
         int byte2 = Compare((uint8_t) source_in1_bytes[4*i + 2], (uint8_t) source_in2_bytes[4*i + 2]);
         int byte3 = Compare((uint8_t) source_in1_bytes[4*i + 3], (uint8_t) source_in2_bytes[4*i + 3]);
-        source_sw_results[i] = (byte0 << 0) | (byte1 << 8) | (byte2 << 16) | (byte3 << 24); // Pack back into 32-bit word
+        source_sw_results[i] = (byte0 << 0) | (byte1 << 8) | (byte2 << 16) | (byte3 << 24); // Pack back into 32-bit word */
         source_hw_results[i] = 0; // Clear HW result buffer
     }
+
+    IMAGE_DIFF_POSTERIZE(source_in1.data(), source_in2.data(), source_sw_results.data());
     et.finish();
 
     // -------------------------------------------------------------------------
@@ -233,4 +237,45 @@ uint8_t Compare(uint8_t A, uint8_t B){
     else C = 255;
 
     return C;
+}
+
+
+void IMAGE_DIFF_POSTERIZE(uint32_t *A , uint32_t *B, uint32_t *out){
+    uint8_t C[DATA_SIZE];
+    int temp_filter;
+    uint8_t temp_out[DATA_SIZE];
+    printf("Difference Matrix:\n");
+    for(int w=0; w< WORD_COUNT; w++){
+            uint32_t word_A = A[w];
+            uint32_t word_B = B[w];
+            for(int byte_idx = 0; byte_idx < 4; byte_idx++){
+                    int idx = w * 4 + byte_idx;
+                    if(idx < DATA_SIZE){
+                    uint8_t byte_A = (word_A >> (byte_idx * 8)) & 0xFF;
+                    uint8_t byte_B = (word_B >> (byte_idx * 8)) & 0xFF;
+                    C[idx] = Compare(byte_A, byte_B);
+                    printf("%d ", C[idx]);
+                    }
+    }
+}
+
+
+    for(int i = 0 ; i < HEIGHT ; i++){
+        for(int j =0 ; j < WIDTH ; j++){
+            int idx = i * WIDTH + j;
+            if(i==0|| i == HEIGHT -1 || j ==0 || j == WIDTH -1){
+                out[idx] = 0; // Set boundary pixels to 0
+            }else{
+                temp_filter = 5*C[idx] 
+                            - C[idx +1] // Right 
+                            - C[idx -1] // Left
+                            - C[idx + WIDTH] // Bottom
+                            - C[idx - WIDTH]; // Top
+                // Clip to [0, 255]
+                out[idx] = (uint8_t)(temp_filter < 0 ? 0 : (temp_filter > 255 ? 255 : temp_filter));
+            }
+        }
+
+
+}
 }
