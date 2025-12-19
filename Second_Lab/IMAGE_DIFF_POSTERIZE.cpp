@@ -36,9 +36,9 @@ void IMAGE_DIFF_POSTERIZE(const uint8_t *in_A, const uint8_t *in_B, uint8_t *out
 #pragma HLS INTERFACE s_axilite port = size bundle = control
 #pragma HLS INTERFACE s_axilite port = return bundle = control
 
-    unsigned int v1_buffer[BUFFER_HEIGHT][BUFFER_WIDTH];   // Local memory to store vector1
-    unsigned int v2_buffer[BUFFER_HEIGHT][BUFFER_WIDTH];   // Local memory to store vector2
-    unsigned int vout_buffer[BUFFER_HEIGHT][BUFFER_WIDTH]; // Local Memory to store result
+    uint8_t v1_buffer[BUFFER_HEIGHT][BUFFER_WIDTH];   // Local memory to store vector1
+    uint8_t v2_buffer[BUFFER_HEIGHT][BUFFER_WIDTH];   // Local memory to store vector2
+    uint8_t vout_buffer[BUFFER_HEIGHT][BUFFER_WIDTH]; // Local Memory to store result
     int temp_filter;
 
 #pragma HLS ARRAY_PARTITION variable = v1_buffer dim = 0 complete
