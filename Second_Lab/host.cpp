@@ -16,11 +16,14 @@
 
 #define WIDTH 256
 #define HEIGHT 256
+#define BUFFER_HEIGHT 3
+#define BUFFER_WIDTH 3
 #define T1 32
 #define T2 96
 
 const int DATA_SIZE = WIDTH*HEIGHT;
 uint8_t Compare(uint8_t A, uint8_t B);
+void IMAGE_DIFF_POSTERIZE(const uint8_t *in_A, const  uint8_t  *in_B, uint8_t *out, unsigned int size);
 
 int main(int argc, char **argv) {
 
@@ -34,37 +37,63 @@ int main(int argc, char **argv) {
 
     EventTimer et;
     std::string binaryFile = argv[1];
-    
+
     size_t vector_size_bytes = sizeof(uint8_t) * DATA_SIZE;
     int size = DATA_SIZE;
 
     // OpenCL objects
     cl_int err;
-    cl::Context context;        
-    cl::Kernel krnl_vector_add; 
-    cl::CommandQueue q;         
+    cl::Context context;
+    cl::Kernel krnl_vector_add;
+    cl::CommandQueue q;
 
     // -------------------------------------------------------------------------
     // 2. Host Memory Allocation & Initialization
     // -------------------------------------------------------------------------
     et.add("Allocate Memory in Host Memory");
-    std::vector<uint8_t, aligned_allocator<int>> source_in1(DATA_SIZE);
-    std::vector<uint8_t, aligned_allocator<int>> source_in2(DATA_SIZE);
-    std::vector<uint8_t, aligned_allocator<int>> source_hw_results(DATA_SIZE);
-    std::vector<uint8_t, aligned_allocator<int>> source_sw_results(DATA_SIZE);
+    std::vector<uint8_t, aligned_allocator<uint8_t>> source_in1(DATA_SIZE);
+    std::vector<uint8_t, aligned_allocator<uint8_t>> source_in2(DATA_SIZE);
+    std::vector<uint8_t, aligned_allocator<uint8_t>> source_hw_results(DATA_SIZE);
+    std::vector<uint8_t, aligned_allocator<uint8_t>> source_sw_results(DATA_SIZE);
+    uint8_t in_A[DATA_SIZE];
+    uint8_t in_B[DATA_SIZE];
+    uint8_t out_C[DATA_SIZE];
     et.finish();
 
     // Fill vectors with random data
     et.add("Fill the buffers");
     std::generate(source_in1.begin(), source_in1.end(), std::rand);
     std::generate(source_in2.begin(), source_in2.end(), std::rand);
-    
+
     // Calculate Golden Result (Software Reference)
     for (int i = 0; i < DATA_SIZE; i++) {
-        source_sw_results[i] = Compare((uint8_t) source_in1[i], (uint8_t) source_in2[i]);
+    	in_A[i] = source_in1[i];
+    	in_B[i] = source_in2[i];
         source_hw_results[i] = 0; // Clear HW result buffer
     }
+    IMAGE_DIFF_POSTERIZE(in_A, in_B, out_C);
+    for(int i =0; i< DATA_SIZE; i++){
+    	source_sw_results[i] = out_C[i];
+    }
     et.finish();
+
+    std::cout << "A matrix: \n";
+    for(int i = 0; i< DATA_SIZE; i++){
+    	std::cout << (int)in_A[i] << " ";
+    }
+    std::cout << "\n";
+
+    std::cout << "B matrix: \n";
+    for(int i = 0; i< DATA_SIZE; i++){
+    	std::cout << (int)in_B[i] << " ";
+    }
+    std::cout << "\n";
+
+    std::cout << "C matrix: \n";
+    for(int i = 0; i< DATA_SIZE; i++){
+    	std::cout << (int)out_C[i] << " ";
+    }
+    std::cout << "\n";
 
     // -------------------------------------------------------------------------
     // 3. OpenCL Setup
@@ -73,7 +102,7 @@ int main(int argc, char **argv) {
     auto devices = xcl::get_xil_devices();
     auto fileBuf = xcl::read_binary_file(binaryFile);
     cl::Program::Binaries bins{{fileBuf.data(), fileBuf.size()}};
-    
+
     int valid_device = 0;
     for (unsigned int i = 0; i < devices.size(); i++) {
         auto device = devices[i];
@@ -82,14 +111,14 @@ int main(int argc, char **argv) {
 
         std::cout << "Trying to program device[" << i << "]: " << device.getInfo<CL_DEVICE_NAME>() << std::endl;
         cl::Program program(context, {device}, bins, NULL, &err);
-        
+
         if (err != CL_SUCCESS) {
             std::cout << "Failed to program device[" << i << "] with xclbin file!\n";
         } else {
             std::cout << "Device[" << i << "]: program successful!\n";
             OCL_CHECK(err, krnl_vector_add = cl::Kernel(program, "IMAGE_DIFF_POSTERIZE", &err));
             valid_device++;
-            break; 
+            break;
         }
     }
 
@@ -136,15 +165,15 @@ int main(int argc, char **argv) {
     // -------------------------------------------------------------------------
     // We export before verification so we have the data even if verification fails.
     et.add("Export results to ../results_comparison.txt");
-    
+
     std::ofstream outFile("../results_comparison.txt");
     if (outFile.is_open()) {
         outFile << "Index\tSW_Result\tHW_Result\tMatch\n";
         for (int i = 0; i < DATA_SIZE; i++) {
-            bool is_match = (source_hw_results[i] == source_sw_results[i]);
-            outFile << i << "\t" 
-                    << source_sw_results[i] << "\t" 
-                    << source_hw_results[i] << "\t" 
+            bool is_match = (source_hw_results[i] == out_C[i]);
+            outFile << i << "\t"
+                    << (int)out_C[i] << "\t"
+                    << (int)source_hw_results[i] << "\t"
                     << (is_match ? "YES" : "NO") << "\n";
         }
         outFile.close();
@@ -160,10 +189,10 @@ int main(int argc, char **argv) {
     et.add("Compare the results of the Device to the simulation");
     bool match = true;
     for (int i = 0; i < DATA_SIZE; i++) {
-        if (source_hw_results[i] != source_sw_results[i]) {
+        if (source_hw_results[i] != out_C[i]) {
             std::cout << "Error: Result mismatch" << std::endl;
-            std::cout << "i = " << i << " CPU result = " << source_sw_results[i]
-                      << " Device result = " << source_hw_results[i] << std::endl;
+            std::cout << "i = " << i << " CPU result = " << (int)out_C[i]
+                      << " Device result = " << (int)source_hw_results[i] << std::endl;
             match = false;
             break;
         }
@@ -182,11 +211,46 @@ uint8_t Compare(uint8_t A, uint8_t B){
     int16_t temp_d = (int16_t) A - (int16_t) B;
     // Note: Since temp_d is unsigned (uint8_t), it can never be < 0.
     // This logic performs a modular subtraction check.
-    uint8_t D = (temp_d < 0) ? -temp_d : temp_d; 
-    
+    uint8_t D = (temp_d < 0) ? -temp_d : temp_d;
+
     if(D < T1) C = 0;
     else if(D < T2) C = 128; // Note: Overwrites C=0 if T1 <= D < T2
     else C = 255;
 
     return C;
 }
+
+void IMAGE_DIFF_POSTERIZE(uint8_t *A , uint8_t *B, uint8_t *out){
+    uint8_t C[HEIGHT*WIDTH];
+    int temp_filter;
+    printf("Difference Matrix:\n");
+    for(int i = 0 ; i < HEIGHT ; i++){
+        for(int j =0 ; j < WIDTH ; j++){
+            int idx = i * WIDTH + j;
+            C[idx] = Compare(A[idx], B[idx]);
+            printf("%d ", C[idx]);
+        }
+        printf("\n");
+    }
+
+    for(int i = 0 ; i < HEIGHT ; i++){
+        for(int j =0 ; j < WIDTH ; j++){
+            int idx = i * WIDTH + j;
+            if(i==0|| i == HEIGHT -1 || j ==0 || j == WIDTH -1){
+                out[idx] = 0; // Set boundary pixels to 0
+            }else{
+                temp_filter = 5*C[idx] 
+                            - C[idx +1] // Right 
+                            - C[idx -1] // Left
+                            - C[idx + WIDTH] // Bottom
+                            - C[idx - WIDTH]; // Top
+                // Clip to [0, 255]
+                out[idx] = (uint8_t)(temp_filter < 0 ? 0 : (temp_filter > 255 ? 255 : temp_filter));
+            }
+        }
+
+
+}
+}
+
+
