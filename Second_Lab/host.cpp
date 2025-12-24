@@ -223,14 +223,11 @@ uint8_t Compare(uint8_t A, uint8_t B){
 void IMAGE_DIFF_POSTERIZE(uint8_t *A , uint8_t *B, uint8_t *out){
     uint8_t C[HEIGHT*WIDTH];
     int temp_filter;
-    printf("Difference Matrix:\n");
     for(int i = 0 ; i < HEIGHT ; i++){
         for(int j =0 ; j < WIDTH ; j++){
             int idx = i * WIDTH + j;
             C[idx] = Compare(A[idx], B[idx]);
-            printf("%d ", C[idx]);
         }
-        printf("\n");
     }
 
     for(int i = 0 ; i < HEIGHT ; i++){

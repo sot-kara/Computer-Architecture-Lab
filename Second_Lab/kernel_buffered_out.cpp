@@ -1,7 +1,7 @@
 #include <stdint.h>
 
-#define WIDTH 128
-#define HEIGHT 128
+#define WIDTH 256
+#define HEIGHT 256
 #define BUFFER_HEIGHT 12
 #define BUFFER_WIDTH 12
 #define CACHE_PAD 2         // Holds the two previous lines columns for correct function of the inner frame filtering.
@@ -102,9 +102,17 @@ void IMAGE_DIFF_POSTERIZE(const uint8_t *in_A, const uint8_t *in_B, uint8_t *out
                     //3) Output Logic
                     // ref = index in the linear context of the output/input.
                     // So we're padding by (inner_row +1)*WIDTH to jump to our row in the linear and then (inner_col+1) for the column.
-                    out[ref + WIDTH*(inner_row+1) + (inner_col+1)] = (uint8_t)(temp_filter < 0 ? 0 : (temp_filter > 255 ? 255 : temp_filter));
+                    //out[ref + WIDTH*(inner_row+1) + (inner_col+1)] = (uint8_t)(temp_filter < 0 ? 0 : (temp_filter > 255 ? 255 : temp_filter));
+                    out_buffer[inner_row][inner_col] = (uint8_t)(temp_filter < 0 ? 0 : (temp_filter > 255 ? 255 : temp_filter));
                 }
             }
+            for (int inner_row = 0; inner_row < BUFFER_HEIGHT - CACHE_PAD; inner_row++){
+                for (int inner_col = 0; inner_col < BUFFER_WIDTH - CACHE_PAD; inner_col++){
+					#pragma HLS PIPELINE II=1
+                	// Write the buffered output
+                	out[ref + WIDTH*(inner_row+1) + (inner_col+1)] = out_buffer[inner_row][inner_col];
+                }
+                }
             // Shifting horizontaly reference point
             ref += BUFFER_WIDTH - CACHE_PAD;
         }
@@ -136,7 +144,7 @@ void IMAGE_DIFF_POSTERIZE(const uint8_t *in_A, const uint8_t *in_B, uint8_t *out
             for (int inner_row = 0; inner_row < BUFFER_HEIGHT - CACHE_PAD; inner_row++){
                 for (int inner_col = 0; inner_col < BUFFER_WIDTH - CACHE_PAD; inner_col++){
 
-                    #pragma HLS PIPELINE II=1
+                    #pragma HLS UNROLL
 
                     temp_filter = 5 * cache[1+inner_row][1+inner_col]   // center
                                     - cache[inner_row][inner_col+1]     // top
@@ -145,9 +153,17 @@ void IMAGE_DIFF_POSTERIZE(const uint8_t *in_A, const uint8_t *in_B, uint8_t *out
                                     - cache[inner_row+1][inner_col+2];  // right
 
                     //3) Output Logic
-                    out[ref + WIDTH*(inner_row+1) + (inner_col+1)] = (uint8_t)(temp_filter < 0 ? 0 : (temp_filter > 255 ? 255 : temp_filter));
+                    //out[ref + WIDTH*(inner_row+1) + (inner_col+1)] = (uint8_t)(temp_filter < 0 ? 0 : (temp_filter > 255 ? 255 : temp_filter));
+                    out_buffer[inner_row][inner_col] = (uint8_t)(temp_filter < 0 ? 0 : (temp_filter > 255 ? 255 : temp_filter));
                 }
             }
+            for (int inner_row = 0; inner_row < BUFFER_HEIGHT - CACHE_PAD; inner_row++){
+                for (int inner_col = 0; inner_col < BUFFER_WIDTH - CACHE_PAD; inner_col++){
+					#pragma HLS PIPELINE II=1
+                	// Write the buffered output
+                	out[ref + WIDTH*(inner_row+1) + (inner_col+1)] = out_buffer[inner_row][inner_col];
+                }
+                }
         }
 
         //Shifting verticaly reference point
