@@ -14,10 +14,10 @@
 #include <fstream>  // <--- ADDED: To support file writing
 #include <stdint.h>
 
-#define WIDTH 256
+#define WIDTH  256
 #define HEIGHT 256
-#define BUFFER_HEIGHT 3
-#define BUFFER_WIDTH 3
+#define BUFFER_HEIGHT 12
+#define BUFFER_WIDTH 12
 #define T1 32
 #define T2 96
 
@@ -71,10 +71,7 @@ int main(int argc, char **argv) {
     	in_B[i] = source_in2[i];
         source_hw_results[i] = 0; // Clear HW result buffer
     }
-    IMAGE_DIFF_POSTERIZE(in_A, in_B, out_C);
-    for(int i =0; i< DATA_SIZE; i++){
-    	source_sw_results[i] = out_C[i];
-    }
+    IMAGE_DIFF_POSTERIZE(in_A, in_B, out_C, size);
     et.finish();
 
     std::cout << "A matrix: \n";
@@ -220,34 +217,66 @@ uint8_t Compare(uint8_t A, uint8_t B){
     return C;
 }
 
-void IMAGE_DIFF_POSTERIZE(uint8_t *A , uint8_t *B, uint8_t *out){
-    uint8_t C[HEIGHT*WIDTH];
+void IMAGE_DIFF_POSTERIZE(const uint8_t *in_A, const uint8_t *in_B, uint8_t *out, unsigned int size)
+{
+
+    unsigned int v1_buffer[BUFFER_HEIGHT][BUFFER_WIDTH];   // Local memory to store vector1
+    unsigned int v2_buffer[BUFFER_HEIGHT][BUFFER_WIDTH];   // Local memory to store vector2
+    unsigned int vout_buffer[BUFFER_HEIGHT][BUFFER_WIDTH]; // Local Memory to store result
     int temp_filter;
-    for(int i = 0 ; i < HEIGHT ; i++){
-        for(int j =0 ; j < WIDTH ; j++){
-            int idx = i * WIDTH + j;
-            C[idx] = Compare(A[idx], B[idx]);
+
+// Per iteration of this loop perform BUFFER_SIZE vector addition
+Chunk_loop:
+    for (int i = 0; i < size; i += 1)
+    {
+        // Handle boundary pixels
+        if (i / WIDTH == 0 || i / WIDTH == HEIGHT - 1 ||
+            i % WIDTH == 0 || i % WIDTH == WIDTH - 1)
+        {
+
+            out[i] = 0; // Center pixel
+        }
+        else
+        {
+        read:
+            for (int j = 0; j < BUFFER_HEIGHT; j++)
+            {
+                for (int k = 0; k < BUFFER_WIDTH; k++)
+                {
+
+                    // Calculate the global row and column indices for the current window pixel
+                    int row = i / WIDTH + j - 1; // Offset by -1 for the 3x3 relative to center
+                    int col = i % WIDTH + k - 1;
+
+
+                    // Safely populate the buffer
+                    v1_buffer[j][k] = in_A[row * WIDTH + col];
+                    v2_buffer[j][k] = in_B[row * WIDTH + col];
+                }
+            }
+
+            for (int j = 0; j < BUFFER_HEIGHT; j++)
+            {
+                for (int k = 0; k < BUFFER_WIDTH; k++)
+                {
+                    vout_buffer[j][k] = Compare((uint8_t)v1_buffer[j][k], (uint8_t)v2_buffer[j][k]);
+                }
+            }
+
+        // Perform filter processing
+        process:
+
+            // Compute filtered value for the center
+            temp_filter = 5 * vout_buffer[1][1] - vout_buffer[0][1] // Top
+                          - vout_buffer[2][1]                       // Bottom
+                          - vout_buffer[1][0]                       // Left
+                          - vout_buffer[1][2];                      // Right
+
+            // Clip result and write to "out" buffer
+            out[i] =
+                (uint8_t)(temp_filter < 0 ? 0 : (temp_filter > 255 ? 255 : temp_filter));
         }
     }
-
-    for(int i = 0 ; i < HEIGHT ; i++){
-        for(int j =0 ; j < WIDTH ; j++){
-            int idx = i * WIDTH + j;
-            if(i==0|| i == HEIGHT -1 || j ==0 || j == WIDTH -1){
-                out[idx] = 0; // Set boundary pixels to 0
-            }else{
-                temp_filter = 5*C[idx] 
-                            - C[idx +1] // Right 
-                            - C[idx -1] // Left
-                            - C[idx + WIDTH] // Bottom
-                            - C[idx - WIDTH]; // Top
-                // Clip to [0, 255]
-                out[idx] = (uint8_t)(temp_filter < 0 ? 0 : (temp_filter > 255 ? 255 : temp_filter));
-            }
-        }
-
-
-}
 }
 
 
