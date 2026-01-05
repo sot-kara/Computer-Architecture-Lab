@@ -1,0 +1,223 @@
+// #include <ap_int.h>
+// #include <hls_stream.h>
+// #include <ap_shift_reg.h>
+
+#define T1 32
+#define T2 96
+#define DATAWIDTH 512       // Data width of Memory Access in bits
+#define CACHE_PAD 2         // Holds the two previous lines columns for correct function of the inner frame filtering.
+#define PIXEL_SIZE 8        // bits per pixel
+#define VECTOR_SIZE (DATAWIDTH / PIXEL_SIZE) // Number of pixels per axi transaction
+
+typedef ap_uint<DATAWIDTH> uint512_dt;
+typedef ap_uint<PIXEL_SIZE> pixel_t;
+
+// --------------------------------------------------------
+// CONFIGURATION
+// --------------------------------------------------------
+// GLOBAL IMAGE (The full image size in DDR)
+#define GLOBAL_WIDTH  512 
+#define GLOBAL_HEIGHT 512
+
+// TILE SIZE (The small "Strip" we process on-chip)
+// This determines BRAM usage. It is much smaller than Global Width.
+#define TILE_WIDTH    128 
+#define TILE_HEIGHT   GLOBAL_HEIGHT 
+
+// Calculate Vector Dimensions
+#define GLOBAL_STRIDE_VEC (GLOBAL_WIDTH / VECTOR_SIZE)
+#define TILE_WIDTH_VEC    (TILE_WIDTH / VECTOR_SIZE)
+#define TOTAL_TILES       (GLOBAL_WIDTH / TILE_WIDTH)
+
+// --------------------------------------------------------
+// STAGE 0: READ TILE (Strided Access)
+// --------------------------------------------------------
+// Reads a vertical strip (Tile) from the global image
+void read_tile(
+    const uint512_dt *in1, 
+    const uint512_dt *in2, 
+    hls::stream<uint512_dt> &s_in1,
+    hls::stream<uint512_dt> &s_in2,
+    int tile_index
+) {
+    // Calculate the horizontal starting offset for this tile
+    int col_offset = tile_index * TILE_WIDTH_VEC;
+
+    // Iterate through every ROW of the tile
+    read_y: for (int i = 0; i < TILE_HEIGHT; i++) {
+        #pragma HLS LOOP_TRIPCOUNT min=64 max=4096
+        
+        // Calculate pointer to the start of this row's segment
+        int row_start_idx = (i * GLOBAL_STRIDE_VEC) + col_offset;
+
+        // Burst read the WIDTH of the tile
+        read_x: for (int j = 0; j < TILE_WIDTH_VEC; j++) {
+            #pragma HLS PIPELINE II=1
+            s_in1.write(in1[row_start_idx + j]);
+            s_in2.write(in2[row_start_idx + j]);
+        }
+    }
+}
+
+// --------------------------------------------------------
+// STAGE 1: Compute G (Stream Processing)
+// --------------------------------------------------------
+void compute_G_stage(
+    hls::stream<uint512_dt> &s_in1, 
+    hls::stream<uint512_dt> &s_in2, 
+    hls::stream<uint512_dt> &stream_G
+) {
+    // Total vectors in one tile
+    int total_vectors = TILE_HEIGHT * TILE_WIDTH_VEC;
+
+    for (int i = 0; i < total_vectors; i++) {
+        #pragma HLS PIPELINE II=1
+        
+        uint512_dt val1 = s_in1.read();
+        uint512_dt val2 = s_in2.read();
+        uint512_dt res_G;
+
+        for (int v = 0; v < VECTOR_SIZE; v++) {
+            #pragma HLS UNROLL
+            pixel_t p1 = val1.range(32 * (v + 1) - 1, v * 32);
+            pixel_t p2 = val2.range(32 * (v + 1) - 1, v * 32);
+            // Example G: Simple addition
+            res_G.range(32 * (v + 1) - 1, v * 32) = p1 + p2;        // CHANGE TO COMPARE
+        }
+        stream_G.write(res_G);
+    }
+}
+
+// --------------------------------------------------------
+// STAGE 2: Compute F (Tiled Line Buffers)
+// --------------------------------------------------------
+void compute_F_stage(
+    hls::stream<uint512_dt> &stream_G, 
+    hls::stream<uint512_dt> &stream_out
+) {
+    // *** CRITICAL CHANGE ***
+    // The Line Buffers are now sized to TILE_WIDTH, not GLOBAL_WIDTH.
+    // This saves massive amounts of BRAM.
+    static uint512_dt line_buffer[2][TILE_WIDTH_VEC]; 
+    #pragma HLS ARRAY_PARTITION variable=line_buffer complete dim=1 
+    #pragma HLS BIND_STORAGE variable=line_buffer type=ram_2p
+
+    // Flattened loop for the whole tile
+    int num_vectors = TILE_HEIGHT * TILE_WIDTH_VEC;
+
+    for (int i = 0; i < num_vectors; i++) {
+        #pragma HLS PIPELINE II=1
+
+        // Position within the current row (0 to TILE_WIDTH_VEC-1)
+        int col_idx = i % TILE_WIDTH_VEC;
+
+        // 1. Shift Line Buffer
+        uint512_dt top_vec = line_buffer[0][col_idx];
+        line_buffer[0][col_idx] = line_buffer[1][col_idx];
+        uint512_dt mid_vec = line_buffer[1][col_idx];
+
+        uint512_dt bot_vec = stream_G.read();
+        line_buffer[1][col_idx] = bot_vec;
+
+        // 2. Compute F (Vertical Average Example)
+        uint512_dt result_F;
+        
+        for (int v = 0; v < VECTOR_SIZE; v++) {
+            #pragma HLS UNROLL
+            pixel_t up   = top_vec.range(32 * (v + 1) - 1, v * 32);
+            pixel_t center = mid_vec.range(32 * (v + 1) - 1, v * 32);
+            pixel_t down = bot_vec.range(32 * (v + 1) - 1, v * 32);
+
+            pixel_t f_val = (up + center + down) / 3;               // CHANGE TO FILTER
+
+            result_F.range(32 * (v + 1) - 1, v * 32) = f_val;
+        }
+
+        // 3. Write Output
+        // Wait until buffer is primed (row 1 processed)
+        if (i >= TILE_WIDTH_VEC) { 
+             stream_out.write(result_F);
+        }
+    }
+}
+
+// --------------------------------------------------------
+// STAGE 3: WRITE TILE (Strided Access)
+// --------------------------------------------------------
+void write_tile(
+    hls::stream<uint512_dt> &stream_out,
+    uint512_dt *out,
+    int tile_index
+) {
+    int col_offset = tile_index * TILE_WIDTH_VEC;
+
+    // We output 1 row less of valid data due to the stencil latency consuming the first row
+    // (Adjust this loop based on your exact boundary requirements)
+    write_y: for (int i = 0; i < TILE_HEIGHT; i++) {
+        #pragma HLS LOOP_TRIPCOUNT min=64 max=4096
+
+        // Calculate global memory index
+        int row_start_idx = (i * GLOBAL_STRIDE_VEC) + col_offset;
+        
+        // Note: For the first row, compute_F might output invalid data 
+        // or we need to handle the loop bounds to skip writing the halo.
+        // For simplicity, we write the full stream back.
+        write_x: for (int j = 0; j < TILE_WIDTH_VEC; j++) {
+            #pragma HLS PIPELINE II=1
+            
+            // Only write if we have valid data (basic check)
+            if(!stream_out.empty()) {
+                out[row_start_idx + j] = stream_out.read();
+            }
+        }
+    }
+}
+
+// --------------------------------------------------------
+// WRAPPER FUNCTION (Processes ONE Tile)
+// --------------------------------------------------------
+void process_single_tile(
+    const uint512_dt *in1, 
+    const uint512_dt *in2, 
+    uint512_dt *out,
+    int tile_index
+) {
+    // Local Streams for this tile execution
+    hls::stream<uint512_dt> s_in1;
+    hls::stream<uint512_dt> s_in2;
+    hls::stream<uint512_dt> s_G;
+    hls::stream<uint512_dt> s_out;
+    
+    #pragma HLS STREAM variable=s_in1 depth=64
+    #pragma HLS STREAM variable=s_in2 depth=64
+    #pragma HLS STREAM variable=s_G   depth=64
+    #pragma HLS STREAM variable=s_out depth=64
+
+    #pragma HLS DATAFLOW
+    read_tile(in1, in2, s_in1, s_in2, tile_index);
+    compute_G_stage(s_in1, s_in2, s_G);
+    compute_F_stage(s_G, s_out);
+    write_tile(s_out, out, tile_index);
+}
+
+// --------------------------------------------------------
+// TOP LEVEL
+// --------------------------------------------------------
+extern "C" {
+    void vadd_tiled(
+        const uint512_dt *in1, 
+        const uint512_dt *in2, 
+        uint512_dt *out
+    ) {
+        #pragma HLS INTERFACE m_axi port = in1 bundle = gmem0
+        #pragma HLS INTERFACE m_axi port = in2 bundle = gmem1
+        #pragma HLS INTERFACE m_axi port = out bundle = gmem0
+        #pragma HLS INTERFACE s_axilite port = return bundle = control
+
+        // MAIN LOOP: Iterate over vertical tiles
+        tile_loop: for (int t = 0; t < TOTAL_TILES; t++) {
+            // Note: Dataflow happens INSIDE the wrapper function
+            process_single_tile(in1, in2, out, t);
+        }
+    }
+}
