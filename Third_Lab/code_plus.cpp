@@ -1,10 +1,10 @@
 #include <stdint.h>
-#include <ap_int.h>    
-#include <hls_stream.h>       
+#include <ap_int.h>
+#include <hls_stream.h>
 
 // Original Image
-#define WIDTH 128
-#define HEIGHT 128
+#define WIDTH 256
+#define HEIGHT 256
 
 // Transaction Definition
 #define PIXEL_SIZE 8
@@ -16,7 +16,7 @@
 #define BUFFER_WIDTH_CHUNKS 2
 #define BUFFER_WIDTH_BYTES (BUFFER_WIDTH_CHUNKS * AXI_WIDTH_BYTES)
 
-const int h_steps = (WIDTH - BUFFER_WIDTH_BYTES) / (BUFFER_WIDTH_BYTES) + 1;
+const int h_steps = (WIDTH - BUFFER_WIDTH_BYTES) / (BUFFER_WIDTH_BYTES) + 1 + 1;
 
 // Type Definitions
 typedef ap_uint<AXI_WIDTH_BITS> uint512_dt;
@@ -37,7 +37,7 @@ const unsigned int BUFFER_SIZE = BUFFER_HEIGHT*BUFFER_WIDTH_BYTES;
 const unsigned int c_size = BUFFER_WIDTH_BYTES;
 const unsigned int c_len = HEIGHT*WIDTH / c_size;
 
-// MAIN 
+// MAIN
 extern "C" {
     void IMAGE_DIFF_POSTERIZE(const uint512_dt *in_A, const uint512_dt *in_B, uint512_dt *out, unsigned int size)
     {
@@ -50,37 +50,40 @@ extern "C" {
         #pragma HLS INTERFACE s_axilite port = out bundle = control
         #pragma HLS INTERFACE s_axilite port = size bundle = control
         #pragma HLS INTERFACE s_axilite port = return bundle = control
-    
+
         // Stream to connect Stage 1 of Comparison and Stage 2 of filtering
-        hls::stream<uint512_dt> stream_G;
-        
+
         // Reference point for reading input data
-        unsigned int href_point = 0;       
-        FilterState State_F = HOLD_2; // Initial State for Filter Stage      
-        
-        
+        unsigned int href_point = 0;
+        FilterState State_F = HOLD_2; // Initial State for Filter Stage
+
+
         // Shift the buffer horizontally
         for (int h_step = 0; h_step < h_steps; h_step++) {
+        	unsigned int local_href_point = href_point;
+        	{
+        hls::stream<uint512_dt> stream_G;
         #pragma HLS DATAFLOW
-        #pragma HLS STREAM variable=stream_G depth=6         
+        #pragma HLS STREAM variable=stream_G depth=512
 
             // Loop the buffer and compare over all image rows
             for (int row = 0; row < HEIGHT; row++) {
-                compute_G_stage(in_A, in_B, stream_G, (row*WIDTH + href_point)/AXI_WIDTH_BYTES);
+                compute_G_stage(in_A, in_B, stream_G, (row*WIDTH + local_href_point)/AXI_WIDTH_BYTES);
             }
 
-            // Filter the buffer over rows and output 
+            // Filter the buffer over rows and output
             for (int row = 0; row < HEIGHT; row++) {
                 switch (row) {
                     case 0: State_F = HOLD_2; break;
                     case 1: State_F = HOLD_1; break;
                     default: State_F = STREAM; break;
                 }
-                compute_F_stage(stream_G, out, State_F, row, href_point); 
+                compute_F_stage(stream_G, out, State_F, row, local_href_point);
             }
+        	}
 
         //Update reference point over columns
-        href_point += AXI_WIDTH_BYTES;            
+        href_point += AXI_WIDTH_BYTES;
         }
 
         // Make the first and last row zeros
@@ -101,9 +104,10 @@ void compute_F_stage(hls::stream<uint512_dt> &stream_G, uint512_dt *out, FilterS
     static pixel_t Prior_chunk_2[BUFFER_WIDTH_BYTES];
     pixel_t Current_chunk[BUFFER_WIDTH_BYTES];
     pixel_t Filtered_chunk[BUFFER_WIDTH_BYTES];
+    static pixel_t inter_pixels[HEIGHT];
 
     #pragma HLS ARRAY_PARTITION variable=Prior_chunk_1 complete
-    #pragma HLS ARRAY_PARTITION variable=Prior_chunk_2 complete     
+    #pragma HLS ARRAY_PARTITION variable=Prior_chunk_2 complete
     #pragma HLS ARRAY_PARTITION variable=Current_chunk complete
     #pragma HLS ARRAY_PARTITION variable=Filtered_chunk complete
 
@@ -117,10 +121,14 @@ void compute_F_stage(hls::stream<uint512_dt> &stream_G, uint512_dt *out, FilterS
                 for (int v = 0; v < AXI_WIDTH_BYTES; v++) {
                 #pragma HLS UNROLL
                     Prior_chunk_1[chunk*AXI_WIDTH_BYTES + v] = temp_val.range(PIXEL_SIZE * (v + 1) - 1, v * PIXEL_SIZE);
-                }
+                    if(chunk == BUFFER_WIDTH_CHUNKS/2 && v ==0){
+                        // Middle pixel of the chunk
+                        inter_pixels[row] = temp_val.range(PIXEL_SIZE * (v + 1) - 1, v * PIXEL_SIZE);
+                    }
+            }
             }
             break;
-            
+
         case HOLD_2:        // Hold t-2 row at the buffer
             // Row chunk unpacking
             for (int chunk = 0; chunk < BUFFER_WIDTH_CHUNKS; chunk++) {
@@ -129,6 +137,10 @@ void compute_F_stage(hls::stream<uint512_dt> &stream_G, uint512_dt *out, FilterS
                 for (int v = 0; v < AXI_WIDTH_BYTES; v++) {
                 #pragma HLS UNROLL
                     Prior_chunk_2[chunk*AXI_WIDTH_BYTES + v] = temp_val.range(PIXEL_SIZE * (v + 1) - 1, v * PIXEL_SIZE);
+                    if(chunk == BUFFER_WIDTH_CHUNKS/2 && v == 0){
+                        // Middle pixel of the chunk
+                        inter_pixels[row] = temp_val.range(PIXEL_SIZE * (v + 1) - 1, v * PIXEL_SIZE);
+                    }
                 }
             }
             break;
@@ -149,6 +161,9 @@ void compute_F_stage(hls::stream<uint512_dt> &stream_G, uint512_dt *out, FilterS
                 // First pixel of the chunk at the left border
                 Filtered_chunk[0] = 0;
             }
+            else{
+                Filtered_chunk[0] = inter_pixels[row];
+            }
 
 
             for (int col = 1; col < BUFFER_WIDTH_BYTES; col++) {
@@ -157,10 +172,10 @@ void compute_F_stage(hls::stream<uint512_dt> &stream_G, uint512_dt *out, FilterS
                 if (col == BUFFER_WIDTH_BYTES - 1){
                     Filtered_chunk[col] = 0;
                 }
-                else {            
-                    int16_t temp_filter = 5 * Prior_chunk_1[col] 
-                                            - Current_chunk[col] 
-                                            - Prior_chunk_2[col] 
+                else {
+                    int16_t temp_filter = 5 * Prior_chunk_1[col]
+                                            - Current_chunk[col]
+                                            - Prior_chunk_2[col]
                                             - Prior_chunk_1[col - 1]
                                             - Prior_chunk_1[col + 1];
 
@@ -168,14 +183,18 @@ void compute_F_stage(hls::stream<uint512_dt> &stream_G, uint512_dt *out, FilterS
                     pixel_t filtered_pixel = (pixel_t) ((temp_filter < 0) ? 0 : (temp_filter > 255 ? 255 : temp_filter));
 
                     // Write back to output buffer
-                    Filtered_chunk[col] = filtered_pixel; 
-                }                               
+                    Filtered_chunk[col] = filtered_pixel;
+                    if(col == BUFFER_WIDTH_BYTES/BUFFER_WIDTH_CHUNKS){
+                                     // Middle pixel of the chunk
+                                    inter_pixels[row] = filtered_pixel;
+                                }
+                }
             }
 
             // Write the filtered chunk to output stream
             uint512_dt out_val;
             unsigned int write_row_offset = ((row - 1) * WIDTH + href_point) / AXI_WIDTH_BYTES;
-            
+
             for (int chunk = 0; chunk < BUFFER_WIDTH_CHUNKS; chunk++) {
             #pragma HLS PIPELINE II=1
                 // Output packing
@@ -198,6 +217,7 @@ void compute_F_stage(hls::stream<uint512_dt> &stream_G, uint512_dt *out, FilterS
 }
 
 
+
 /* G-STAGE: ROW COMPARISON
     - Input  : 1 row of [BUFFER_WIDTH_CHUNKS] chunks from in_A and in_B right after the ref_point
     - Output : 1 compared row of afforementioned size as input to the filter stage
@@ -206,7 +226,7 @@ void compute_G_stage(const uint512_dt *in1, const uint512_dt *in2, hls::stream<u
 
     for (int i = 0; i < BUFFER_WIDTH_CHUNKS; i++) {
         #pragma HLS PIPELINE II=1
-        
+
         uint512_dt val1 = in1[ref_point + i];
         uint512_dt val2 = in2[ref_point + i];
         uint512_dt res_G;
@@ -218,10 +238,10 @@ void compute_G_stage(const uint512_dt *in1, const uint512_dt *in2, hls::stream<u
             // Unpack
             pixel_t p1 = val1.range(PIXEL_SIZE * (v + 1) - 1, v * PIXEL_SIZE);
             pixel_t p2 = val2.range(PIXEL_SIZE * (v + 1) - 1, v * PIXEL_SIZE);
-            
+
             // Compare
             pixel_t g_val = Compare(p1, p2);
-            
+
             // Re-pack
             res_G.range(PIXEL_SIZE * (v + 1) - 1, v * PIXEL_SIZE) = g_val;
         }
