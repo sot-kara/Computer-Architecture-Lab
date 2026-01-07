@@ -61,6 +61,7 @@ extern "C" {
         // Shift the buffer horizontally
         for (int h_step = 0; h_step < h_steps; h_step++) {
         	unsigned int local_href_point = href_point;
+            
         	{
         hls::stream<uint512_dt> stream_G;
         #pragma HLS DATAFLOW
