@@ -1,19 +1,27 @@
 #include <stdint.h>
-#include <ap_int.h>    
-#include <hls_stream.h>       
+#include <ap_int.h>
+#include <hls_stream.h>
 
 // Original Image
-#define WIDTH 256
-#define HEIGHT 256
+#define WIDTH 64
+#define HEIGHT 64
 
 // Transaction Definition
 #define PIXEL_SIZE 8
-#define AXI_WIDTH_BITS 512       // Data width of Memory Access in bits per cycle
+#if WIDTH <= 64
+    #define AXI_WIDTH_BITS WIDTH*PIXEL_SIZE        // Data width of Memory Access in bits per cycle
+#else
+    #define AXI_WIDTH_BITS 512       // Data width of Memory Access in bits per cycle
+#endif
 #define AXI_WIDTH_BYTES (AXI_WIDTH_BITS / PIXEL_SIZE)
 
 // Buffer - Cached Image
 #define BUFFER_HEIGHT 3
-#define BUFFER_WIDTH_CHUNKS 2
+#if WIDTH <= 64
+    #define BUFFER_WIDTH_CHUNKS 1
+#else
+	#define BUFFER_WIDTH_CHUNKS 2
+#endif
 #define BUFFER_WIDTH_BYTES (BUFFER_WIDTH_CHUNKS * AXI_WIDTH_BYTES)
 
 const unsigned int h_steps = (WIDTH - BUFFER_WIDTH_BYTES) / (AXI_WIDTH_BYTES) + 1;
@@ -34,7 +42,7 @@ const unsigned int BUFFER_SIZE = BUFFER_HEIGHT*BUFFER_WIDTH_BYTES;
 const unsigned int c_size = BUFFER_WIDTH_BYTES;
 const unsigned int c_len = HEIGHT*WIDTH / c_size;
 
-// MAIN 
+// MAIN
 extern "C" {
     void IMAGE_DIFF_POSTERIZE(const uint512_dt *in_A, const uint512_dt *in_B, uint512_dt *out, unsigned int size)
     {
@@ -53,17 +61,17 @@ extern "C" {
         pixel_t Prior_chunk_2[BUFFER_WIDTH_BYTES];
         pixel_t Filtered_chunk[BUFFER_WIDTH_BYTES];
         pixel_t inter_pixels[2][HEIGHT];
-        
+
         #pragma HLS ARRAY_PARTITION variable=inter_pixels complete dim=1
         #pragma HLS ARRAY_PARTITION variable=Prior_chunk_1 complete
-        #pragma HLS ARRAY_PARTITION variable=Prior_chunk_2 complete     
+        #pragma HLS ARRAY_PARTITION variable=Prior_chunk_2 complete
         #pragma HLS ARRAY_PARTITION variable=Filtered_chunk complete
         #pragma HLS ARRAY_PARTITION variable=inter_pixels complete
-        
+
         // Reference point for reading input data
-       // unsigned int href_point = 0;       
-        FilterState State_F = HOLD_2; // Initial State for Filter Stage      
-    
+       // unsigned int href_point = 0;
+        FilterState State_F = HOLD_2; // Initial State for Filter Stage
+
         uint512_dt stream_G[HEIGHT * BUFFER_WIDTH_CHUNKS];
 
         // Shift the buffer horizontally
@@ -72,10 +80,10 @@ extern "C" {
         // Stream to connect Stage 1 of Comparison and Stage 2 of filtering
         #pragma HLS DATAFLOW
         #pragma HLS STREAM variable=stream_G depth = 100     // TODO: We may need to add some fifo space for safety
-        
-        int curr_buf = h_step % 2;   
+
+        int curr_buf = h_step % 2;
         int prev_buf = 1 - curr_buf;
-        
+
             // Loop the buffer and compare over all image rows
             for (int row = 0; row < HEIGHT; row++) {
                 unsigned int href_point = h_step * AXI_WIDTH_BYTES;
@@ -84,7 +92,7 @@ extern "C" {
 
                 for (int i = 0; i < BUFFER_WIDTH_CHUNKS; i++) {
                 #pragma HLS PIPELINE II=1
-                
+
                     uint512_dt val1 = in_A[ref_point + i];
                     uint512_dt val2 = in_B[ref_point + i];
                     uint512_dt res_G;
@@ -96,10 +104,10 @@ extern "C" {
                         // Unpack
                         pixel_t p1 = val1.range(PIXEL_SIZE * (v + 1) - 1, v * PIXEL_SIZE);
                         pixel_t p2 = val2.range(PIXEL_SIZE * (v + 1) - 1, v * PIXEL_SIZE);
-                        
+
                         // Compare
                         pixel_t g_val = Compare(p1, p2);
-                        
+
                         // Re-pack
                         res_G.range(PIXEL_SIZE * (v + 1) - 1, v * PIXEL_SIZE) = g_val;
                     }
@@ -114,14 +122,14 @@ extern "C" {
                 Prior_chunk_1[k] = 0;
                 Prior_chunk_2[k] = 0;
             }
-            
-            // Filter the buffer over rows and output 
-            for (int row = 0; row < HEIGHT; row++) {   
-                
+
+            // Filter the buffer over rows and output
+            for (int row = 0; row < HEIGHT; row++) {
+
                 // Declaring here for hinting a temporary storage
                 pixel_t Current_chunk[BUFFER_WIDTH_BYTES];
                 #pragma HLS ARRAY_PARTITION variable=Current_chunk complete
-                     
+
                 unsigned int href_point = h_step * AXI_WIDTH_BYTES;
 
                 // Row chunk unpacking
@@ -142,16 +150,17 @@ extern "C" {
                         Filtered_chunk[0] = 0;
                     }
                     else{
+                    	if(WIDTH >64)
                         Filtered_chunk[0] = inter_pixels[prev_buf][row - 1];
                     }
-                    
+
                     for (int col = 1; col < BUFFER_WIDTH_BYTES; col++) {
                     #pragma HLS UNROLL
 
                         if (col == BUFFER_WIDTH_BYTES - 1){
                             Filtered_chunk[col] = 0;
                         }
-                        else {            
+                        else {
                             int16_t temp_filter = 5 * Prior_chunk_1[col] // Center pixel
                                                     - Current_chunk[col] // Down pixel
                                                     - Prior_chunk_2[col] // Up pixel
@@ -162,18 +171,19 @@ extern "C" {
                             pixel_t filtered_pixel = (pixel_t) (temp_filter < 0) ? 0 : (temp_filter > 255 ? 255 : temp_filter);
 
                             // Write back to output buffer
-                            Filtered_chunk[col] = filtered_pixel; 
+                            Filtered_chunk[col] = filtered_pixel;
 
-                        }                               
+                        }
                     }
-                        
+
                     // Middle pixel of the chunk
-                    inter_pixels[curr_buf][row - 1] = Filtered_chunk[BUFFER_WIDTH_BYTES/BUFFER_WIDTH_CHUNKS];
+                    if(WIDTH > 64)
+                    	inter_pixels[curr_buf][row - 1] = Filtered_chunk[BUFFER_WIDTH_BYTES/BUFFER_WIDTH_CHUNKS];
 
                     // Write the filtered chunk to output stream
                     uint512_dt out_val;
                     unsigned int write_row_offset = ((row - 1) * WIDTH + href_point) / AXI_WIDTH_BYTES;
-                    
+
                     for (int chunk = 0; chunk < BUFFER_WIDTH_CHUNKS; chunk++) {
                     #pragma HLS PIPELINE II=1
                         // Output packing
@@ -192,7 +202,7 @@ extern "C" {
                     Prior_chunk_2[v] = Prior_chunk_1[v];
                     Prior_chunk_1[v] = Current_chunk[v];
                 }
-            }       
+            }
         }
 
         // Make the first and last row zeros
