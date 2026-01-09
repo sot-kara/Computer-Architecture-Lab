@@ -3,8 +3,8 @@
 #include <hls_stream.h>
 
 // Original Image
-#define WIDTH 64
-#define HEIGHT 64
+#define WIDTH 256
+#define HEIGHT 512
 
 // Transaction Definition
 #define PIXEL_SIZE 8
@@ -40,7 +40,7 @@ const unsigned int c_len = HEIGHT*WIDTH / c_size;
 
 // MAIN
 extern "C" {
-    void IMAGE_DIFF_POSTERIZE(const uint512_dt *in_A, const uint512_dt *in_B, uint512_dt *out, unsigned int size)
+    void IMAGE_DIFF_POSTERIZE(const uint512_dt *in_A, const uint512_dt *in_B, uint512_dt *out)
     {
         // INTERFACE DIRECTIVES
         #pragma HLS INTERFACE m_axi port = in_A offset = slave bundle = gmem0
@@ -67,27 +67,23 @@ extern "C" {
         // Stream Declaration
         hls::stream<uint512_dt> stream_G;  // We don't mind that it is HEIGHT sized, finally becomes just a stream of fixed depth.
 
-
-
         // Calculate number of vertical steps
         const int v_steps = (HEIGHT % V_LIMIT) ? (HEIGHT / V_LIMIT) + 1 : (HEIGHT / V_LIMIT);
 
         for (int v_step = 0; v_step < v_steps; v_step++){
-            // Calculating first & last row of every v_step
-            int ref_row = (v_step == 0) ? 0 : v_step * V_LIMIT - 2;                // - 2 to include the two previous rows for filtering
+ 
+            // Handle row range for this vertical step
+            int ref_row = (v_step == 0) ? 0 : v_step * V_LIMIT - 2;
+            unsigned int last_row = (v_step + 1) * V_LIMIT;
 
-                // Last Row of step: Is the last step AND  Height not multiple of V_LIMIT then adjust else normal last = v_step*V_LIMIT -1
-            unsigned int last_row = ((v_step == v_steps - 1) && (HEIGHT % V_LIMIT)) ? ref_row + (HEIGHT % V_LIMIT) - 1 : v_step * V_LIMIT - 1;
-            if (v_step == 0) {
-                last_row = V_LIMIT - 1;
-            }
+            // Clamp to image height 
+            if (last_row > HEIGHT) last_row = HEIGHT;
 
             // Special case for single step to include last row and start from 0
             if (v_steps == 1) {
                 last_row = HEIGHT;
                 ref_row = 0;
             }
-
 
 
             // Shift the buffer horizontally
