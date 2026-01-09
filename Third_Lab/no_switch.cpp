@@ -29,11 +29,6 @@ const unsigned int h_steps = (WIDTH - BUFFER_WIDTH_BYTES) / (AXI_WIDTH_BYTES) + 
 // Type Definitions
 typedef ap_uint<AXI_WIDTH_BITS> uint512_dt;
 typedef ap_uint<PIXEL_SIZE> pixel_t;
-typedef enum {
-    HOLD_1,
-    HOLD_2,
-    STREAM
-} FilterState;
 
 // Helper Functions
 pixel_t Compare(pixel_t A, pixel_t B);
@@ -69,8 +64,6 @@ extern "C" {
         #pragma HLS ARRAY_PARTITION variable=inter_pixels complete
 
         // Reference point for reading input data
-       // unsigned int href_point = 0;
-        FilterState State_F = HOLD_2; // Initial State for Filter Stage
 
         uint512_dt stream_G[HEIGHT * BUFFER_WIDTH_CHUNKS];
 
@@ -81,8 +74,8 @@ extern "C" {
         #pragma HLS DATAFLOW
         #pragma HLS STREAM variable=stream_G depth = 100     // TODO: We may need to add some fifo space for safety
 
-        int curr_buf = h_step % 2;
-        int prev_buf = 1 - curr_buf;
+            int curr_buf = h_step % 2;
+            int prev_buf = 1 - curr_buf;
 
             // Loop the buffer and compare over all image rows
             for (int row = 0; row < HEIGHT; row++) {
@@ -97,7 +90,7 @@ extern "C" {
                     uint512_dt val2 = in_B[ref_point + i];
                     uint512_dt res_G;
 
-                    // Compute G(in1, in2) on all AXI PIXELS (64 elements) in parallel
+                    // Compute Compare (Posterize) on all AXI PIXELS (64 elements) in parallel
                     for (int v = 0; v < AXI_WIDTH_BYTES; v++) {
                         #pragma HLS UNROLL
 
@@ -161,11 +154,11 @@ extern "C" {
                             Filtered_chunk[col] = 0;
                         }
                         else {
-                            int16_t temp_filter = 5 * Prior_chunk_1[col] // Center pixel
-                                                    - Current_chunk[col] // Down pixel
-                                                    - Prior_chunk_2[col] // Up pixel
-                                                    - Prior_chunk_1[col - 1] // Left pixel
-                                                    - Prior_chunk_1[col + 1]; // Right pixel
+                            int16_t temp_filter = 5 * Prior_chunk_1[col]        // Center pixel
+                                                    - Current_chunk[col]        // Down pixel
+                                                    - Prior_chunk_2[col]        // Up pixel
+                                                    - Prior_chunk_1[col - 1]    // Left pixel
+                                                    - Prior_chunk_1[col + 1];   // Right pixel
 
                             // Clamping the result to [0, 255]
                             pixel_t filtered_pixel = (pixel_t) (temp_filter < 0) ? 0 : (temp_filter > 255 ? 255 : temp_filter);

@@ -20,12 +20,6 @@ const unsigned int h_steps = (WIDTH - BUFFER_WIDTH_BYTES) / (AXI_WIDTH_BYTES) + 
 
 // Type Definitions
 typedef ap_uint<AXI_WIDTH_BITS> uint512_dt;
-typedef ap_uint<PIXEL_SIZE> pixel_t;
-typedef enum {
-    HOLD_1,
-    HOLD_2,
-    STREAM
-} FilterState;
 
 // Helper Functions
 pixel_t Compare(pixel_t A, pixel_t B);
@@ -58,11 +52,7 @@ extern "C" {
         #pragma HLS ARRAY_PARTITION variable=Prior_chunk_1 complete
         #pragma HLS ARRAY_PARTITION variable=Prior_chunk_2 complete     
         #pragma HLS ARRAY_PARTITION variable=Filtered_chunk complete
-        #pragma HLS ARRAY_PARTITION variable=inter_pixels complete
-        
-        // Reference point for reading input data
-       // unsigned int href_point = 0;       
-        FilterState State_F = HOLD_2; // Initial State for Filter Stage      
+        #pragma HLS ARRAY_PARTITION variable=inter_pixels complete     
     
         uint512_dt stream_G[HEIGHT * BUFFER_WIDTH_CHUNKS];
 
@@ -89,7 +79,7 @@ extern "C" {
                     uint512_dt val2 = in_B[ref_point + i];
                     uint512_dt res_G;
 
-                    // Compute G(in1, in2) on all AXI PIXELS (64 elements) in parallel
+                    // Compute Compare (Posterize) on all AXI PIXELS (64 elements) in parallel
                     for (int v = 0; v < AXI_WIDTH_BYTES; v++) {
                         #pragma HLS UNROLL
 
