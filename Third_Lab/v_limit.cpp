@@ -3,8 +3,8 @@
 #include <hls_stream.h>
 
 // Original Image
-#define WIDTH 256
-#define HEIGHT 512
+#define WIDTH 128
+#define HEIGHT 128
 
 // Transaction Definition
 #define PIXEL_SIZE 8
@@ -15,8 +15,6 @@
 #endif
 #define AXI_WIDTH_BYTES (AXI_WIDTH_BITS / PIXEL_SIZE)
 
-// Buffer - Cached Image
-#define BUFFER_HEIGHT 3
 #if WIDTH <= 64
     #define BUFFER_WIDTH_CHUNKS 1
 #else
@@ -34,7 +32,6 @@ typedef ap_uint<PIXEL_SIZE> pixel_t;
 // Helper Functions
 pixel_t Compare(pixel_t A, pixel_t B);
 
-const unsigned int BUFFER_SIZE = BUFFER_HEIGHT*BUFFER_WIDTH_BYTES;
 const unsigned int c_size = BUFFER_WIDTH_BYTES;
 const unsigned int c_len = HEIGHT*WIDTH / c_size;
 
@@ -49,8 +46,8 @@ extern "C" {
         #pragma HLS INTERFACE s_axilite port = in_A bundle = control
         #pragma HLS INTERFACE s_axilite port = in_B bundle = control
         #pragma HLS INTERFACE s_axilite port = out bundle = control
-        #pragma HLS INTERFACE s_axilite port = size bundle = control
         #pragma HLS INTERFACE s_axilite port = return bundle = control
+
 
         // Local Buffers
         pixel_t Prior_chunk_1[BUFFER_WIDTH_BYTES];
@@ -71,12 +68,12 @@ extern "C" {
         const int v_steps = (HEIGHT % V_LIMIT) ? (HEIGHT / V_LIMIT) + 1 : (HEIGHT / V_LIMIT);
 
         for (int v_step = 0; v_step < v_steps; v_step++){
- 
+
             // Handle row range for this vertical step
             int ref_row = (v_step == 0) ? 0 : v_step * V_LIMIT - 2;
             unsigned int last_row = (v_step + 1) * V_LIMIT;
 
-            // Clamp to image height 
+            // Clamp to image height
             if (last_row > HEIGHT) last_row = HEIGHT;
 
             // Special case for single step to include last row and start from 0
@@ -91,7 +88,7 @@ extern "C" {
 
             // Stream to connect Stage 1 of Comparison and Stage 2 of filtering
             #pragma HLS DATAFLOW
-            #pragma HLS STREAM variable=stream_G depth = 100     // TODO: We may need to adjust fifo space 
+            #pragma HLS STREAM variable=stream_G depth = 100    
 
                 int curr_buf = h_step % 2;
                 int prev_buf = 1 - curr_buf;
@@ -164,7 +161,7 @@ extern "C" {
                             Filtered_chunk[0] = 0;
                         }
                         else{
-                            if(WIDTH >64)
+                            if(WIDTH >128)
                             Filtered_chunk[0] = inter_pixels[prev_buf][row - 2 - ref_row];
                         }
 
@@ -190,7 +187,7 @@ extern "C" {
                         }
 
                         // Middle pixel of the chunk
-                        if(WIDTH > 64)
+                        if(WIDTH > 128)
                             inter_pixels[curr_buf][row - 2 - ref_row] = Filtered_chunk[BUFFER_WIDTH_BYTES/BUFFER_WIDTH_CHUNKS];
 
                         // Write the filtered chunk to output stream
@@ -218,7 +215,7 @@ extern "C" {
                 }
             }
         }
-        
+
         // Make the first and last row zeros
         for(int chunk=0; chunk < WIDTH/AXI_WIDTH_BYTES; chunk++){
             out[chunk] = 0;
